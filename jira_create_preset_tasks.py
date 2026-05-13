@@ -20,54 +20,41 @@ with open(CONFIG_FILE, 'r') as f:
 
 API_TOKEN = config.get("API_TOKEN")
 EMAIL = config.get("EMAIL")
+BILLABLE_PARENT = config.get("BILLABLE_PARENT_KEY")
+NON_BILLABLE_PARENT = config.get("NON_BILLABLE_PARENT_KEY")
 
 if not API_TOKEN or not EMAIL:
     print(f"Error: El archivo '{CONFIG_FILE}' debe contener 'EMAIL' y 'API_TOKEN'.")
     sys.exit(1)
 
-# Tareas predefinidas para el set up inicial
+# Tareas predefinidas con sus mapeos a padres
 PRESET_TASKS = [
-    {"summary": "Setup: Configuración de Tablero y Columnas", "description": "Ejecutar el script de estandarización de columnas y verificar el flujo de trabajo."},
-    {"summary": "Setup: Mapeo Inicial de Status", "description": "Revisar que todos los status del workflow estén correctamente asignados a las columnas del tablero."},
-    {"summary": "Setup: Definición de Filtros de Visualización", "description": "Configurar los filtros necesarios para ocultar tareas técnicas o irrelevantes del tablero principal."},
-    {"summary": "Setup: Kick-off Técnico del Proyecto", "description": "Reunión inicial para alinear al equipo con la nueva estructura del tablero de Jira."}
+    {"template": "REUI - {project_name}", "parent_type": "BILLABLE"},
+    {"template": "GG - {project_name}", "parent_type": "BILLABLE"},
+    {"template": "REUE - {project_name}", "parent_type": "BILLABLE"},
+    {"template": "AM - {project_name} - NB", "parent_type": "NON_BILLABLE"}
 ]
 
 def parse_url(url):
-    # Intentar extraer el project key de URLs de tablero o de proyecto
+    # Extraer el project key de la URL
     match = re.search(r'/projects/([^/]+)', url)
     if not match:
         raise ValueError("URL inválida. No se pudo encontrar el Project Key.")
     return match.group(1).split('/')[0]
 
-def create_issue(domain, project_key, summary, description, auth):
+def create_subtask(domain, project_key, parent_key, summary, auth):
     url = f"{domain}/rest/api/3/issue"
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
     
-    # Estructura básica para Jira Cloud API v3 (ADF para descripción)
     payload = {
         "fields": {
             "project": {"key": project_key},
+            "parent": {"key": parent_key},
             "summary": summary,
-            "description": {
-                "type": "doc",
-                "version": 1,
-                "content": [
-                    {
-                        "type": "paragraph",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": description
-                            }
-                        ]
-                    }
-                ]
-            },
-            "issuetype": {"name": "Task"} # Asumimos que existe el tipo "Task"
+            "issuetype": {"name": "Sub-task"}
         }
     }
     
@@ -80,7 +67,7 @@ def main():
         sys.exit(1)
         
     url_input = sys.argv[1]
-    domain = "/".join(url_input.split("/")[:3]) # Extrae https://dominio.atlassian.net
+    domain = "/".join(url_input.split("/")[:3])
     
     try:
         project_key = parse_url(url_input)
@@ -88,16 +75,31 @@ def main():
         print(f"Error: {e}")
         sys.exit(1)
 
-    print(f"=== Creando Tareas de Set Up Inicial ===")
+    print(f"=== Creando Sub-tareas de Set Up (Child Items) ===")
     print(f"Proyecto: {project_key}")
-    print("-" * 40)
+    print(f"Billiable Parent: {BILLABLE_PARENT}")
+    print(f"No Billiable Parent: {NON_BILLABLE_PARENT}")
+    print("-" * 50)
     
     auth = HTTPBasicAuth(EMAIL, API_TOKEN)
     
     success_count = 0
     for task in PRESET_TASKS:
-        print(f"Creando: {task['summary']}...")
-        res = create_issue(domain, project_key, task['summary'], task['description'], auth)
+        # Resolver el nombre del proyecto (usamos el key del proyecto)
+        summary = task["template"].format(project_name=project_key)
+        
+        # Resolver el padre
+        if task["parent_type"] == "BILLABLE":
+            parent_key = BILLABLE_PARENT
+        else:
+            parent_key = NON_BILLABLE_PARENT
+            
+        if not parent_key:
+            print(f"  [SKIPPED] '{summary}' no tiene definido un parent key en config.json")
+            continue
+
+        print(f"Creando: {summary} (Hijo de {parent_key})...")
+        res = create_subtask(domain, project_key, parent_key, summary, auth)
         
         if res.status_code == 201:
             issue_key = res.json().get('key')
@@ -107,8 +109,8 @@ def main():
             print(f"  [ERROR] No se pudo crear: {res.status_code}")
             print(f"  Detalle: {res.text}")
 
-    print("-" * 40)
-    print(f"¡Proceso finalizado! Se crearon {success_count} de {len(PRESET_TASKS)} tareas.")
+    print("-" * 50)
+    print(f"¡Proceso finalizado! Se crearon {success_count} de {len(PRESET_TASKS)} sub-tareas.")
 
 if __name__ == "__main__":
     main()

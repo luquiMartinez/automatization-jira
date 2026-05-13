@@ -76,19 +76,28 @@ python3 jira_hide_tasks.py "https://ddm-monks.atlassian.net/jira/software/c/proj
 
 ---
 
-## 3. Creador de Tareas de Set Up (`jira_create_preset_tasks.py`)
+## 3. Creador de Sub-tareas de Set Up (`jira_create_preset_tasks.py`)
 
 ### ¿Para qué sirve?
-Este script automatiza la creación de un conjunto de tareas iniciales (4 tareas de ejemplo) para el set up de un nuevo proyecto. Es ideal para asegurar que los primeros pasos de configuración técnica nunca se olviden.
+Este script crea automáticamente las 4 sub-tareas obligatorias para el inicio de un proyecto, vinculándolas a sus respectivas tareas "Padre" (Billable y Non-Billable) según la configuración.
 
-Las tareas que crea son:
-1. Setup: Configuración de Tablero y Columnas
-2. Setup: Mapeo Inicial de Status
-3. Setup: Definición de Filtros de Visualización
-4. Setup: Kick-off Técnico del Proyecto
+**Tareas que genera:**
+- **REUI** - {Nombre Proyecto} (Hija de Billable)
+- **GG** - {Nombre Proyecto} (Hija de Billable)
+- **REUE** - {Nombre Proyecto} (Hija de Billable)
+- **AM** - {Nombre Proyecto} - NB (Hija de Non-Billable)
+
+### Configuración previa
+Antes de usarlo, debes definir los IDs de las tareas padre en tu `config.json`:
+```json
+{
+    "BILLABLE_PARENT_KEY": "00033336-14",
+    "NON_BILLABLE_PARENT_KEY": "00033336-1"
+}
+```
 
 ### ¿Cómo usarlo y ejecutarlo?
-Solo requiere la URL del proyecto o del tablero.
+Solo requiere la URL del proyecto o del tablero. El script extraerá el nombre del proyecto automáticamente de la URL.
 
 **Comando en la terminal:**
 ```bash
@@ -97,5 +106,5 @@ python3 jira_create_preset_tasks.py "URL_DEL_PROYECTO"
 
 **Ejemplo de ejecución:**
 ```bash
-python3 jira_create_preset_tasks.py "https://ddm-monks.atlassian.net/jira/software/c/projects/INTLATSETL"
+python3 jira_create_preset_tasks.py "https://ddm-monks.atlassian.net/jira/software/c/projects/E00033336"
 ```
