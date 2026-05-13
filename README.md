@@ -97,14 +97,17 @@ Antes de usarlo, debes definir los IDs de las tareas padre en tu `config.json`:
 ```
 
 ### ¿Cómo usarlo y ejecutarlo?
-Solo requiere la URL del proyecto o del tablero. El script extraerá el nombre del proyecto automáticamente de la URL.
+El script requiere tres parámetros:
+1. La **URL** del proyecto o tablero.
+2. El **ID de la tarea Billable** (ej. `E00033336-14`).
+3. El **ID de la tarea No Billable** (ej. `E00033336-1`).
 
 **Comando en la terminal:**
 ```bash
-python3 jira_create_preset_tasks.py "URL_DEL_PROYECTO"
+python3 jira_create_preset_tasks.py "URL_DEL_PROYECTO" "ID_BILLABLE" "ID_NO_BILLABLE"
 ```
 
 **Ejemplo de ejecución:**
 ```bash
-python3 jira_create_preset_tasks.py "https://ddm-monks.atlassian.net/jira/software/c/projects/E00033336"
+python3 jira_create_preset_tasks.py "https://ddm-monks.atlassian.net/jira/software/c/projects/E00033336" "E00033336-14" "E00033336-1"
 ```

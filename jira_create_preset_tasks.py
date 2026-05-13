@@ -20,8 +20,6 @@ with open(CONFIG_FILE, 'r') as f:
 
 API_TOKEN = config.get("API_TOKEN")
 EMAIL = config.get("EMAIL")
-BILLABLE_PARENT = config.get("BILLABLE_PARENT_KEY")
-NON_BILLABLE_PARENT = config.get("NON_BILLABLE_PARENT_KEY")
 
 if not API_TOKEN or not EMAIL:
     print(f"Error: El archivo '{CONFIG_FILE}' debe contener 'EMAIL' y 'API_TOKEN'.")
@@ -62,11 +60,15 @@ def create_subtask(domain, project_key, parent_key, summary, auth):
     return res
 
 def main():
-    if len(sys.argv) < 2:
-        print("Uso: python jira_create_preset_tasks.py <PROJECT_OR_BOARD_URL>")
+    if len(sys.argv) < 4:
+        print("Uso: python jira_create_preset_tasks.py <URL_PROYECTO> <BILLABLE_PARENT_KEY> <NON_BILLABLE_PARENT_KEY>")
+        print('Ejemplo: python jira_create_preset_tasks.py "https://..." "PROJ-14" "PROJ-1"')
         sys.exit(1)
         
     url_input = sys.argv[1]
+    billable_parent = sys.argv[2]
+    non_billable_parent = sys.argv[3]
+    
     domain = "/".join(url_input.split("/")[:3])
     
     try:
@@ -77,8 +79,8 @@ def main():
 
     print(f"=== Creando Sub-tareas de Set Up (Child Items) ===")
     print(f"Proyecto: {project_key}")
-    print(f"Billiable Parent: {BILLABLE_PARENT}")
-    print(f"No Billiable Parent: {NON_BILLABLE_PARENT}")
+    print(f"Billiable Parent: {billable_parent}")
+    print(f"No Billiable Parent: {non_billable_parent}")
     print("-" * 50)
     
     auth = HTTPBasicAuth(EMAIL, API_TOKEN)
@@ -90,13 +92,9 @@ def main():
         
         # Resolver el padre
         if task["parent_type"] == "BILLABLE":
-            parent_key = BILLABLE_PARENT
+            parent_key = billable_parent
         else:
-            parent_key = NON_BILLABLE_PARENT
-            
-        if not parent_key:
-            print(f"  [SKIPPED] '{summary}' no tiene definido un parent key en config.json")
-            continue
+            parent_key = non_billable_parent
 
         print(f"Creando: {summary} (Hijo de {parent_key})...")
         res = create_subtask(domain, project_key, parent_key, summary, auth)
