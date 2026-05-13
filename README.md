@@ -73,3 +73,29 @@ python3 jira_hide_tasks.py "URL_DEL_TABLERO" "PREFIJO" "NUMEROS"
 python3 jira_hide_tasks.py "https://ddm-monks.atlassian.net/jira/software/c/projects/E00033340/boards/4888" "E00033340" "2,3,4,5,6"
 ```
 *(En el ejemplo anterior, el script se conectará a Jira y ocultará automáticamente las tareas E00033340-2, E00033340-3, E00033340-4, E00033340-5 y E00033340-6 del tablero 4888).*
+
+---
+
+## 3. Creador de Tareas de Set Up (`jira_create_preset_tasks.py`)
+
+### ¿Para qué sirve?
+Este script automatiza la creación de un conjunto de tareas iniciales (4 tareas de ejemplo) para el set up de un nuevo proyecto. Es ideal para asegurar que los primeros pasos de configuración técnica nunca se olviden.
+
+Las tareas que crea son:
+1. Setup: Configuración de Tablero y Columnas
+2. Setup: Mapeo Inicial de Status
+3. Setup: Definición de Filtros de Visualización
+4. Setup: Kick-off Técnico del Proyecto
+
+### ¿Cómo usarlo y ejecutarlo?
+Solo requiere la URL del proyecto o del tablero.
+
+**Comando en la terminal:**
+```bash
+python3 jira_create_preset_tasks.py "URL_DEL_PROYECTO"
+```
+
+**Ejemplo de ejecución:**
+```bash
+python3 jira_create_preset_tasks.py "https://ddm-monks.atlassian.net/jira/software/c/projects/INTLATSETL"
+```
