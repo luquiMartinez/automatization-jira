@@ -35,6 +35,35 @@ def get_issue(issue_key, auth):
     res.raise_for_status()
     return res.json()
 
+def find_equivalent_parent(project_key, old_parent_summary, auth):
+    # Escapar comillas dobles en el summary para el JQL
+    escaped_summary = old_parent_summary.replace('"', '\\"')
+    jql = f'project = "{project_key}" AND summary ~ "{escaped_summary}"'
+    
+    url = f"{DOMAIN}/rest/api/3/search/jql"
+    params = {
+        "jql": jql,
+        "fields": "summary",
+        "maxResults": 20
+    }
+    
+    headers = {"Accept": "application/json"}
+    try:
+        res = requests.get(url, auth=auth, headers=headers, params=params)
+        if res.status_code != 200:
+            return None
+        
+        issues = res.json().get("issues", [])
+        target_summary_clean = old_parent_summary.strip().lower()
+        for issue in issues:
+            fields = issue.get("fields", {})
+            summary = fields.get("summary", "")
+            if summary.strip().lower() == target_summary_clean:
+                return issue.get("key")
+    except Exception:
+        pass
+    return None
+
 def create_issue(project_key, summary, description, issue_type_name, parent_key, auth):
     url = f"{DOMAIN}/rest/api/3/issue"
     headers = {
@@ -44,7 +73,7 @@ def create_issue(project_key, summary, description, issue_type_name, parent_key,
     
     # Manejar sub-tareas sin padre definido
     if (issue_type_name.lower() in ("sub-task", "subtarea", "sub-tarea")) and not parent_key:
-        print(f"  [Info] La tarea original es una sub-tarea pero no especificaste un Padre en el proyecto destino.")
+        print(f"  [Info] La tarea original es una sub-tarea pero no se pudo encontrar o definir un Padre en el destino.")
         print(f"         Se intentará crear como 'Task' estándar...")
         issue_type_name = "Task"
 
@@ -115,7 +144,6 @@ def add_comment(issue_key, message_text, target_key, target_url, auth):
         "Content-Type": "application/json"
     }
     
-    # ADF JSON format for structured link comments
     payload = {
         "body": {
             "type": "doc",
@@ -157,7 +185,7 @@ def main():
     if len(sys.argv) < 3:
         print("Uso: python3 jira_migrate_task.py <KEY_TAREA_VIEJA> <KEY_PROYECTO_NUEVO> [KEY_PADRE_NUEVO]")
         print("Ejemplo: python3 jira_migrate_task.py \"E00033336-14\" \"INTDATALB\"")
-        print("Ejemplo con Padre: python3 jira_migrate_task.py \"INTDATALB-352\" \"INTDATALB\" \"INTDATALB-13\"")
+        print("Ejemplo con Padre: python3 jira_migrate_task.py \"INTDATALB-352\" \"INTDATALB\" \"INTDATALB-12\"")
         sys.exit(1)
         
     old_issue_key = sys.argv[1].upper().strip()
@@ -168,7 +196,7 @@ def main():
     print(f"Tarea vieja (origen): {old_issue_key}")
     print(f"Proyecto nuevo (destino): {new_project_key}")
     if new_parent_key:
-        print(f"Padre nuevo (destino): {new_parent_key}")
+        print(f"Padre nuevo (especificado): {new_parent_key}")
     print(f"Dominio Jira: {DOMAIN}")
     print("-" * 50)
     
@@ -187,13 +215,31 @@ def main():
         old_parent = fields.get("parent", {})
         
         print(f"  [OK] Detalles obtenidos: '{summary}' (Tipo: {issue_type_name})")
-        if old_parent and not new_parent_key:
-            print(f"  [Info] La tarea origen pertenece al padre: {old_parent.get('key')} ({old_parent.get('fields', {}).get('summary')})")
-            print(f"         Si deseas asignarle un padre en el nuevo proyecto, recuerda pasar su Key como 3er parámetro.")
+        
+        # Resolución inteligente de la tarea Padre (Epic / Tarea Superior)
+        parent_key_to_use = new_parent_key
+        
+        if old_parent:
+            old_parent_key = old_parent.get("key")
+            old_parent_fields = old_parent.get("fields", {})
+            old_parent_summary = old_parent_fields.get("summary")
+            
+            print(f"  [Info] La tarea origen pertenece al padre: {old_parent_key} (\"{old_parent_summary}\")")
+            
+            if not parent_key_to_use:
+                print(f"  [Auto-Parent] Buscando tarea padre equivalente en el proyecto '{new_project_key}'...")
+                resolved_parent = find_equivalent_parent(new_project_key, old_parent_summary, auth)
+                if resolved_parent:
+                    parent_key_to_use = resolved_parent
+                    print(f"  [Auto-Parent] ¡Padre encontrado automáticamente!: {parent_key_to_use} (\"{old_parent_summary}\")")
+                else:
+                    print(f"  [Auto-Parent] No se encontró una tarea con el título exacto \"{old_parent_summary}\" en el proyecto '{new_project_key}'.")
+            else:
+                print(f"  [Info] Se utilizará el padre especificado por parámetro: {parent_key_to_use}")
         
         # 2. Crear la nueva tarea en el nuevo proyecto
         print("\nCreando la nueva tarea en el proyecto destino...")
-        new_issue = create_issue(new_project_key, summary, description, issue_type_name, new_parent_key, auth)
+        new_issue = create_issue(new_project_key, summary, description, issue_type_name, parent_key_to_use, auth)
         new_issue_key = new_issue.get("key")
         
         new_url = f"{DOMAIN}/browse/{new_issue_key}"
