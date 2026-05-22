@@ -42,7 +42,8 @@ TARGET_COLUMNS = [
 # Sinónimos para emparejar automáticamente status que se llamen distinto
 SYNONYMS = {
     "COMPLETED": "DONE",
-    "BACKLOG": "NOT STARTED"
+    "BACKLOG": "NOT STARTED",
+    "TO DO/DEBRIEF": "TO DO"
 }
 
 def parse_url(url):
@@ -65,7 +66,10 @@ def get_board_config(domain, board_id, auth):
     url = f"{domain}/rest/greenhopper/1.0/rapidviewconfig/editmodel.json?rapidViewId={board_id}"
     res = requests.get(url, auth=auth)
     res.raise_for_status()
-    return res.json()
+    data = res.json()
+    if "errorMessages" in data and data["errorMessages"]:
+        raise ValueError("\n".join(data["errorMessages"]))
+    return data
 
 def map_status_to_column(status_name):
     upper_name = status_name.upper().strip()
@@ -98,8 +102,8 @@ def main():
     try:
         project_statuses = get_project_statuses(domain, project_key, auth)
         board_config = get_board_config(domain, board_id, auth)
-    except requests.exceptions.RequestException as e:
-        print(f"Error conectando a Jira: {e}")
+    except (requests.exceptions.RequestException, ValueError) as e:
+        print(f"Error: {e}")
         sys.exit(1)
     
     # Preparar el nuevo layout de columnas con la plantilla estricta
@@ -160,7 +164,11 @@ def main():
     res = requests.put(put_url, auth=auth, json=payload, headers=headers)
     
     if res.status_code == 200:
-        print("¡Tablero estandarizado con éxito! 🎉")
+        data = res.json()
+        if "errorMessages" in data and data["errorMessages"]:
+            print(f"Error al actualizar tablero: {', '.join(data['errorMessages'])}")
+        else:
+            print("¡Tablero estandarizado con éxito! 🎉")
     else:
         print(f"Error al actualizar tablero: {res.status_code}")
         print(res.text)
