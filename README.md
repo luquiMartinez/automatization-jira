@@ -87,15 +87,6 @@ Este script crea automáticamente las 4 sub-tareas obligatorias para el inicio d
 - **REUE** - {Nombre Proyecto} (Hija de Billable)
 - **AM** - {Nombre Proyecto} - NB (Hija de Non-Billable)
 
-### Configuración previa
-Antes de usarlo, debes definir los IDs de las tareas padre en tu `config.json`:
-```json
-{
-    "BILLABLE_PARENT_KEY": "00033336-14",
-    "NON_BILLABLE_PARENT_KEY": "00033336-1"
-}
-```
-
 ### ¿Cómo usarlo y ejecutarlo?
 El script requiere tres parámetros:
 1. La **URL** del proyecto o tablero.
@@ -111,3 +102,38 @@ python3 jira_create_preset_tasks.py "URL_DEL_PROYECTO" "ID_BILLABLE" "ID_NO_BILL
 ```bash
 python3 jira_create_preset_tasks.py "https://ddm-monks.atlassian.net/jira/software/c/projects/E00033336" "E00033336-14" "E00033336-1"
 ```
+
+---
+
+## 4. Migrador y Clonador de Tareas (`jira_migrate_task.py`)
+
+### ¿Para qué sirve?
+Este script automatiza la clonación/migración de una tarea de un proyecto origen (viejo) a un proyecto destino (nuevo) de forma premium. 
+
+**Características clave:**
+- **Preserva el Nombre y la Descripción:** Copia el summary y mantiene intacto el formato de texto enriquecido (ADF) de la descripción.
+- **Trazabilidad de Enlaces:** Crea un **enlace nativo en Jira** (tipo *Relates*) que conecta la tarea vieja con la nueva de forma interactiva.
+- **Comentarios Cruzados:** Agrega de forma automática comentarios cruzados con enlaces interactivos en ambas tareas indicando que la tarea ha sido migrada (por ejemplo, en la tarea vieja deja un link directo a la nueva y viceversa).
+- **Soporte para Padres/Epics:** Si el proyecto de destino requiere que las tareas pertenezcan a un Padre o Epic para ser creadas, puedes pasar opcionalmente el ID del padre como tercer parámetro del script.
+
+### ¿Cómo usarlo y ejecutarlo?
+El script requiere dos parámetros obligatorios y uno opcional:
+1. El **ID de la tarea vieja** (ej. `INTDATALB-352`).
+2. El **ID del proyecto nuevo** (ej. `INTDATALB`).
+3. *(Opcional)* El **ID del padre o Epic** en el nuevo proyecto (ej. `INTDATALB-12`).
+
+**Comando básico (sin padre):**
+```bash
+python3 jira_migrate_task.py "ID_TAREA_VIEJA" "ID_PROYECTO_NUEVO"
+```
+
+**Comando con padre/Epic (obligatorio en proyectos con validaciones):**
+```bash
+python3 jira_migrate_task.py "ID_TAREA_VIEJA" "ID_PROYECTO_NUEVO" "ID_TAREA_PADRE"
+```
+
+**Ejemplo de ejecución con Epic/Padre:**
+```bash
+python3 jira_migrate_task.py "INTDATALB-352" "INTDATALB" "INTDATALB-12"
+```
+
