@@ -35,16 +35,35 @@ def get_issue(issue_key, auth):
     res.raise_for_status()
     return res.json()
 
+def classify_parent_summary(summary):
+    summary_lower = summary.lower()
+    # Buscar patrones para Non-Billable / NB
+    if "non-billable" in summary_lower or "non billable" in summary_lower or re.search(r'\bnb\b', summary_lower):
+        return "NON_BILLABLE"
+    # Buscar patrones para Billable / Billiable
+    if "billable" in summary_lower or "billiable" in summary_lower:
+        return "BILLABLE"
+    return None
+
 def find_equivalent_parent(project_key, old_parent_summary, auth):
-    # Escapar comillas dobles en el summary para el JQL
-    escaped_summary = old_parent_summary.replace('"', '\\"')
-    jql = f'project = "{project_key}" AND summary ~ "{escaped_summary}"'
+    parent_type = classify_parent_summary(old_parent_summary)
     
+    if parent_type == "BILLABLE":
+        jql = f'project = "{project_key}" AND (summary ~ "billable" OR summary ~ "billiable")'
+        print(f"  [Auto-Parent] Tarea origen clasificada como 'BILLABLE'. Buscando equivalente en '{project_key}'...")
+    elif parent_type == "NON_BILLABLE":
+        jql = f'project = "{project_key}" AND (summary ~ "nb" OR summary ~ "non-billable" OR summary ~ "non billable")'
+        print(f"  [Auto-Parent] Tarea origen clasificada como 'NON-BILLABLE'. Buscando equivalente en '{project_key}'...")
+    else:
+        escaped_summary = old_parent_summary.replace('"', '\\"')
+        jql = f'project = "{project_key}" AND summary ~ "{escaped_summary}"'
+        print(f"  [Auto-Parent] Buscando tarea con título exacto en '{project_key}'...")
+
     url = f"{DOMAIN}/rest/api/3/search/jql"
     params = {
         "jql": jql,
         "fields": "summary",
-        "maxResults": 20
+        "maxResults": 30
     }
     
     headers = {"Accept": "application/json"}
@@ -54,14 +73,26 @@ def find_equivalent_parent(project_key, old_parent_summary, auth):
             return None
         
         issues = res.json().get("issues", [])
-        target_summary_clean = old_parent_summary.strip().lower()
-        for issue in issues:
-            fields = issue.get("fields", {})
-            summary = fields.get("summary", "")
-            if summary.strip().lower() == target_summary_clean:
-                return issue.get("key")
-    except Exception:
-        pass
+        
+        if parent_type == "BILLABLE":
+            for issue in issues:
+                summary = issue.get("fields", {}).get("summary", "").lower()
+                if "billable" in summary or "billiable" in summary:
+                    return issue.get("key")
+        elif parent_type == "NON_BILLABLE":
+            for issue in issues:
+                summary = issue.get("fields", {}).get("summary", "").lower()
+                if "non-billable" in summary or "non billable" in summary or re.search(r'\bnb\b', summary):
+                    return issue.get("key")
+        else:
+            # Fallback exact match
+            target_summary_clean = old_parent_summary.strip().lower()
+            for issue in issues:
+                summary = issue.get("fields", {}).get("summary", "").lower().strip()
+                if summary == target_summary_clean:
+                    return issue.get("key")
+    except Exception as e:
+        print(f"  [Advertencia] Error al buscar padre equivalente: {e}")
     return None
 
 def create_issue(project_key, summary, description, issue_type_name, parent_key, auth):
@@ -227,13 +258,11 @@ def main():
             print(f"  [Info] La tarea origen pertenece al padre: {old_parent_key} (\"{old_parent_summary}\")")
             
             if not parent_key_to_use:
-                print(f"  [Auto-Parent] Buscando tarea padre equivalente en el proyecto '{new_project_key}'...")
-                resolved_parent = find_equivalent_parent(new_project_key, old_parent_summary, auth)
-                if resolved_parent:
-                    parent_key_to_use = resolved_parent
-                    print(f"  [Auto-Parent] ¡Padre encontrado automáticamente!: {parent_key_to_use} (\"{old_parent_summary}\")")
+                parent_key_to_use = find_equivalent_parent(new_project_key, old_parent_summary, auth)
+                if parent_key_to_use:
+                    print(f"  [Auto-Parent] ¡Padre asignado automáticamente!: {parent_key_to_use}")
                 else:
-                    print(f"  [Auto-Parent] No se encontró una tarea con el título exacto \"{old_parent_summary}\" en el proyecto '{new_project_key}'.")
+                    print(f"  [Auto-Parent] No se pudo encontrar un padre equivalente 'BILLABLE' o 'NON-BILLABLE' en '{new_project_key}'.")
             else:
                 print(f"  [Info] Se utilizará el padre especificado por parámetro: {parent_key_to_use}")
         
