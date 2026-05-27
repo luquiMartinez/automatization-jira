@@ -33,12 +33,50 @@ PRESET_TASKS = [
     {"template": "AM - {project_name} - NB", "parent_type": "NON_BILLABLE"}
 ]
 
-def parse_url(url):
-    # Extraer el project key de la URL
+def parse_jira_context(url):
+    """Extrae project key y, si la URL es de un tablero, el board id."""
     match = re.search(r'/projects/([^/]+)', url)
     if not match:
         raise ValueError("URL inválida. No se pudo encontrar el Project Key.")
-    return match.group(1).split('/')[0]
+    project_key = match.group(1).split('/')[0]
+    board_match = re.search(r'/boards/(\d+)', url)
+    board_id = board_match.group(1) if board_match else None
+    return project_key, board_id
+
+
+def normalize_label_for_templates(display_name):
+    """
+    Si el nombre en Jira ya lleva prefijo REUI/GG/REUE/AM, quítalo para no duplicarlo
+    en las plantillas (ej. tablero 'REUE - BBVA - ...' -> sufijo para 'REUE - BBVA - ...').
+    """
+    if not display_name:
+        return display_name
+    s = display_name.strip()
+    m = re.match(r"^(?i)(REUI|GG|REUE|AM)\s*-\s*(.+)$", s)
+    return m.group(2).strip() if m else s
+
+
+def fetch_display_name_for_summaries(domain, project_key, board_id, auth):
+    """
+    Nombre para {project_name}: tablero (si la URL incluye board id) o nombre del proyecto.
+    """
+    headers = {"Accept": "application/json"}
+    if board_id:
+        board_url = f"{domain}/rest/agile/1.0/board/{board_id}"
+        res = requests.get(board_url, auth=auth, headers=headers)
+        if res.status_code == 200:
+            name = (res.json() or {}).get("name")
+            if name and str(name).strip():
+                return normalize_label_for_templates(str(name).strip())
+        print(f"  [Aviso] No se pudo leer el tablero {board_id} ({res.status_code}). Probando nombre del proyecto...")
+    proj_url = f"{domain}/rest/api/3/project/{project_key}"
+    res = requests.get(proj_url, auth=auth, headers=headers)
+    if res.status_code == 200:
+        name = (res.json() or {}).get("name")
+        if name and str(name).strip():
+            return normalize_label_for_templates(str(name).strip())
+    print(f"  [Aviso] No se pudo leer el proyecto {project_key} ({res.status_code}).")
+    return None
 
 def create_subtask(domain, project_key, parent_key, summary, auth):
     url = f"{domain}/rest/api/3/issue"
@@ -61,8 +99,9 @@ def create_subtask(domain, project_key, parent_key, summary, auth):
 
 def main():
     if len(sys.argv) < 4:
-        print("Uso: python jira_create_preset_tasks.py <URL_PROYECTO> <BILLABLE_PARENT_KEY> <NON_BILLABLE_PARENT_KEY>")
-        print('Ejemplo: python jira_create_preset_tasks.py "https://..." "PROJ-14" "PROJ-1"')
+        print("Uso: python jira_create_preset_tasks.py <URL_PROYECTO_O_TABLERO> <BILLABLE_PARENT_KEY> <NON_BILLABLE_PARENT_KEY>")
+        print('Ejemplo: python jira_create_preset_tasks.py "https://.../projects/MIPROJ" "MIPROJ-14" "MIPROJ-1"')
+        print('  Los títulos usan el nombre del proyecto en Jira (API). Si la URL incluye /boards/ID, se usa el nombre del tablero.')
         sys.exit(1)
         
     url_input = sys.argv[1]
@@ -72,23 +111,29 @@ def main():
     domain = "/".join(url_input.split("/")[:3])
     
     try:
-        project_key = parse_url(url_input)
+        project_key, board_id = parse_jira_context(url_input)
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
 
+    auth = HTTPBasicAuth(EMAIL, API_TOKEN)
+    name_for_summaries = fetch_display_name_for_summaries(domain, project_key, board_id, auth)
+    if not name_for_summaries:
+        name_for_summaries = project_key
+        print(f"  [Aviso] Usando la clave del proyecto en los títulos: {project_key}")
+
     print(f"=== Creando Sub-tareas de Set Up (Child Items) ===")
-    print(f"Proyecto: {project_key}")
+    print(f"Proyecto (clave Jira): {project_key}")
+    if board_id:
+        print(f"Tablero en URL: {board_id} (nombre tomado del tablero si fue posible)")
+    print(f"Nombre en títulos: {name_for_summaries}")
     print(f"Billiable Parent: {billable_parent}")
     print(f"No Billiable Parent: {non_billable_parent}")
     print("-" * 50)
     
-    auth = HTTPBasicAuth(EMAIL, API_TOKEN)
-    
     success_count = 0
     for task in PRESET_TASKS:
-        # Resolver el nombre del proyecto (usamos el key del proyecto)
-        summary = task["template"].format(project_name=project_key)
+        summary = task["template"].format(project_name=name_for_summaries)
         
         # Resolver el padre
         if task["parent_type"] == "BILLABLE":
